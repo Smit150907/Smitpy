@@ -1,114 +1,58 @@
-import asyncio
-from telethon import TelegramClient, events, functions, types
-from telethon.sessions import StringSession
-from datetime import datetime, timedelta
+import pymongo
+import schedule
+import time
+from pyrogram import Client, filters
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from threading import Thread
 
-API_ID = 27034173
-API_HASH = 'db451b0d92014f80c6ab13289d88fb27'
-BOT_TOKEN = '7213690750:AAFOiAns7LJG3kHHApyl-lbpBIosgueXmCg'
-SESSION = '1BVtsOGcBu5dC9JXtA5MZFqG2d6VURod1_wJLPgTJb5FabGVMSGxgHf_L04XW0XCy14h5A0aO4dPmVRj9v6VJBciAgPR4cai1Y73VHBUOAMnFHD_hZ722ynWmbM_17QzveIckVwbDqnvr5WPOx8uaWPyBXyH5W5In7cWW6CiHn-HBplHbRL_kTDG0FC1G-umAEDytmFbkI7IJmLpzs1liDnmzNTPtGK-CJib6X5-eKgDxjHdJfvTe2R_4S_bbk1Dj0Bx1DAaEAMsCElM_ZPSpWvja2I1ls5ykrsbBFqsMv94DITCAx1ljF94YvEgQ7dZvZXNlCcewxI5OO65zLUGLpdFBr8r8G10=‘
-GROUP_ID = -1002132674838
+mongo = pymongo.MongoClient("mongodb+srv://dbuserds:akashti@cluster0.zhmedkn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+db = mongo["BDBOT"]
+users = db["users"]
 
-app = TelegramClient('bt', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
-ass = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
-verified_traders = set()
-user_invite_links = {}
+api_id = '29906518'
+api_hash = '76a9e84e87200fb7311a2d779a42d13a'
+bot_token = '6639550663:AAHzLhrLm8O0YGqk3ZNKjzVY34p9D_8biB8'
 
-@app.on(events.NewMessage(pattern='/start'))
-async def start(event):
-    user = await event.get_sender()
-    full_name = user.first_name
-    if user.last_name:
-        full_name += f" {user.last_name}"
-    welcome_message = (
-        f"Welcome {full_name} to FTT Auto-Verify Trader ID Bot! "
-        "Please enter your trader ID here (only numbers). After successful verification, "
-        "we will add you to our VIP group!"
-    )
-    await event.reply(welcome_message)
+app = Client("bdbot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
-@app.on(events.NewMessage)
-async def handle_message(event):
-    if event.is_private and not event.message.message.startswith('/'):
-        trader_id = event.message.message
-        if not trader_id.isdigit():
-            await event.reply("Not a Valid ID, Please enter numbers only")
-            return
-        if len(trader_id) != 8:
-            await event.reply("Trader ID only consists of 8 numbers!! ✅")
-            return
-        if trader_id in verified_traders:
-            await event.reply("This trader ID has already been verified by another user, one trader ID only one time verification.")
-            return
+@app.on_message(filters.command("start") & filters.private)
+def start(client: Client, message: Message):
+    user_id = message.from_user.id
+    if not users.find_one({"user_id": user_id}):
+        users.insert_one({"user_id": user_id})
+
+def send_messages():
+    users_list = users.find()
+    for user in users_list:
         try:
-            async with ass.conversation("QuotexPartnerBot") as conv:
-                await conv.send_message(trader_id)
-                response = await conv.get_response()
-
-                if "Trader with ID" in response.text and "was not found" in response.text:
-                    await event.reply(
-                        "Dear Member,\n\n"
-                        "It appears that your account is not registered using my referral link.❌\n\n"
-                        "Please create your account using the appropriate link below:👇\n\n"
-                        "- **For worldwide members:** https://broker-qx.pro/sign-up/?lid=292132\n"
-                        "- **For Bangladesh members:** https://market-qx.pro/sign-up/?lid=292132\n\n"
-                        "After creating your account, please deposit minimum 50$ and type your trader ID. 🏆💰\n\n"
-                        "Thank you."
-                    )
-                elif "Trader #" in response.text:
-                    balance_line = next(line for line in response.text.split('\n') if "Balance:" in line)
-                    balance_str = balance_line.split("$")[1].strip().replace('**', '').strip()
-                    balance = float(balance_str)
-
-                    if balance >= 50:
-                        verified_traders.add(trader_id)
-
-                        # Create a unique invite link for the user
-                        invite_link = await app(functions.messages.ExportChatInviteRequest(
-                            peer=GROUP_ID,
-                            title="VIP Invitation"
-                        ))
-                        if isinstance(invite_link, types.ChatInviteExported):
-                            user_invite_links[invite_link.link] = event.sender_id
-                            link_message = await event.reply(
-                                "Your ID has been successfully verified.✅\n\n"
-                                "Thank you for choosing the FTT VIP Group. You are now an official member.\n\n"
-                                f"Please join us on Telegram: {invite_link.link}\n\n"
-                                "We look forward to your participation. Happy trading 🤩💰"
-                            )
-                            await asyncio.sleep(300)
-                            await link_message.delete()
-                        else:
-                            await event.reply("Failed to generate invite link. Please try again later.")
-                    else:
-                        await event.reply(
-                            "Your balance is less than 50$, please deposit at least 50$ or more to join our VIP."
-                        )
-                else:
-                    await event.reply("Not a valid ID ?")
-
+            inline_keyboard = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Recover your looses 🚀", url="https://t.me/FTT21")]]
+            )
+            app.send_photo(
+                user["user_id"],
+                photo="https://graph.org/file/27b32c851fa3e88b7313b.jpg",
+                caption=("Don’t worry!! 😉\n"
+                         "I can recover all of your lifetime losses in just one session only!! 😳📈🚀\n\n"
+                         "It may sound suspicious right? But i am serious look we just did three step-compounding 👀🫡\n\n"
+                         "Our all VIP members made huge profits from it, they all recovered their losses 🚀📈\n\n"
+                         "Do you also want to recover your loss? 🫡\n"
+                         "Join now:\n"
+                         "https://t.me/FTT21\n"
+                         "https://t.me/FTT21\n"
+                         "https://t.me/FTT21\n"
+                         "https://t.me/FTT21"),
+                reply_markup=inline_keyboard
+            )
         except Exception as e:
-            print("Error:", e)
-            await event.reply("An error occurred while processing your request. Please try again later.")
+            print(f"Failed to send message to {user['user_id']}: {e}")
 
-@app.on(events.ChatAction)
-async def handler(event):
-    if event.user_joined or event.user_added:
-        user_id = event.user_id
-        for invite_link, stored_user_id in user_invite_links.items():
-            if stored_user_id == user_id:
-                try:
-                    await app(functions.messages.EditExportedChatInviteRequest(
-                        peer=GROUP_ID,
-                        link=invite_link,
-                        revoked=True
-                    ))
-                    del user_invite_links[invite_link]
-                    break
-                except Exception as e:
-                    print(f"Error revoking invite link: {e}")
+def run_scheduler():
+    schedule.every(2).hours.do(send_messages)
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
-if __name__ == '__main__':
-    ass.start()
-    print("Bot is running...")
-    app.run_until_disconnected()
+if name == "main":
+    Thread(target=run_scheduler).start()
+    print("bot is running")
+    app.run()
